@@ -5,9 +5,14 @@ import { Signal } from '@preact/signals';
 import { Extension, ExtensionConstructor, Interceptor } from './extension';
 
 /**
+ * Global object reference. In some cases, the `unsafeWindow` is not available.
+ */
+const globalObject = unsafeWindow ?? window ?? globalThis;
+
+/**
  * The original XHR method backup.
  */
-const xhrOpen = unsafeWindow.XMLHttpRequest.prototype.open;
+const xhrOpen = globalObject.XMLHttpRequest.prototype.open;
 
 /**
  * The registry for all extensions.
@@ -105,7 +110,7 @@ export class ExtensionManager {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const manager = this;
 
-    unsafeWindow.XMLHttpRequest.prototype.open = function (method: string, url: string) {
+    globalObject.XMLHttpRequest.prototype.open = function (method: string, url: string) {
       if (manager.debugEnabled) {
         logger.debug(`XHR initialized`, { method, url });
       }
@@ -134,5 +139,19 @@ export class ExtensionManager {
     };
 
     logger.info('Hooked into XMLHttpRequest');
+
+    // Check for current execution context.
+    // The `webpackChunk_twitter_responsive_web` is injected by the Twitter website.
+    // See: https://violentmonkey.github.io/posts/inject-into-context/
+    setTimeout(() => {
+      if (!('webpackChunk_twitter_responsive_web' in globalObject)) {
+        logger.error(
+          'Error: Wrong execution context detected.\n  ' +
+            'This script needs to be injected into "page" context rather than "content" context.\n  ' +
+            'The XMLHttpRequest hook will not work properly.\n  ' +
+            'See: https://github.com/prinsss/twitter-web-exporter/issues/19',
+        );
+      }
+    }, 1000);
   }
 }
